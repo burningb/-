@@ -32,7 +32,8 @@ GitHub Pages로 배포해도 그대로 동작합니다.
 - `index.html`: 페이지 전체 (HTML, CSS, JS 한 파일)
 - `score.jpg`, `opera.jpg`: 작가의 악보 그림, 시드니 오페라하우스 그림
 - `fig1.png`, `fig2.png`, `rc.png`: 피규어와 RC카 이미지
-- `cello1.mp3`, `cello2.mp3`: 첼로 녹음
+- `cells.mp3`: 01 진동의 56개 칸 소리 (첼로 연주1에서 활이 울리기 시작하는 지점부터 잘라 모은 것)
+- `cello2.mp3`: 첼로 연주2 전곡
 - `sound.json`: 녹음에서 뽑은 활 단위 구간, 음높이, 음량 데이터
 - `sound_data.py`: `sound.json`을 만드는 스크립트
 - `bow_and_wheel_video.py`: 같은 데이터로 영상 《활과 바퀴》를 렌더링하는 스크립트
