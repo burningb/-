@@ -51,7 +51,7 @@ main{position:relative;min-height:0;overflow:hidden}
   background:radial-gradient(ellipse 14% 22% at var(--sx,30%) 4%,rgba(255,226,180,.22),transparent 70%),radial-gradient(ellipse 40% 30% at 50% 0%,rgba(140,120,160,.10),transparent 70%),linear-gradient(180deg,#1c1820,#0d0b0f 60%)}
 .paper .base{position:absolute;inset:0;background:url(score.jpg) center/100% 100%;filter:brightness(.22) saturate(.6)}
 .grid{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(7,1fr)}
-.cell{position:relative;border:0;padding:0;margin:0;background:url(score.jpg) 0 0/800% 700%;opacity:0;cursor:pointer;transition:opacity .9s ease,filter .9s ease}
+.cell{touch-action:manipulation;position:relative;border:0;padding:0;margin:0;background:url(score.jpg) 0 0/800% 700%;opacity:0;cursor:pointer;transition:opacity .9s ease,filter .9s ease}
 .cell:hover{opacity:.35}
 .cell.seen{opacity:.62;filter:saturate(.8);transform:translateZ(10px)}
 .cell.on{opacity:1;filter:saturate(1.15) brightness(calc(1 + var(--amp,0)*.6));z-index:2;transform:translateZ(calc(42px + var(--amp,0)*46px)) scale(calc(1.04 + var(--amp,0)*.06));box-shadow:0 22px 34px rgba(0,0,0,.65),0 0 calc(10px + var(--amp,0)*40px) rgba(255,240,210,.35);transition:opacity .15s,filter .05s,transform .08s}
@@ -215,28 +215,39 @@ function stepLook(){ const now=performance.now();
   const k=RM?1:.06; look.x+=(look.tx-look.x)*k; look.y+=(look.ty-look.y)*k; if(RM){look.x=look.y=0;} }
 
 /* ---------- audio ---------- */
+// Audio must be switched on inside the tap itself (iOS keeps it locked otherwise).
+function openAudio(){
+  try{ if(navigator.audioSession) navigator.audioSession.type='playback'; }catch(e){}
+  AC=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+  master=AC.createGain(); analyser=AC.createAnalyser(); analyser.fftSize=1024;
+  master.connect(analyser); analyser.connect(AC.destination);
+  const b=AC.createBuffer(1,1,22050), s=AC.createBufferSource(); s.buffer=b; s.connect(AC.destination); s.start(0);
+  AC.resume?.();
+}
+function wakeAudio(){ if(AC&&AC.state!=='running') AC.resume?.(); }
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) wakeAudio(); });
+const get=async n=>{ const ab=await (await fetch(''+n)).arrayBuffer(); return await new Promise((ok,no)=>{ const p=AC.decodeAudioData(ab,ok,no); if(p&&p.then) p.then(ok,no); }); };
+let c2Ready=null;
 async function loadAll(){
   $('load').textContent='소리를 불러오는 중…';
   S=await (await fetch('sound.json')).json();
-  AC=new (window.AudioContext||window.webkitAudioContext)();
-  master=AC.createGain(); analyser=AC.createAnalyser(); analyser.fftSize=1024;
-  master.connect(analyser); analyser.connect(AC.destination);
-  const get=async n=>AC.decodeAudioData(await (await fetch(''+n)).arrayBuffer());
-  [bufs.c1,bufs.c2]=await Promise.all([get('cello1.mp3'),get('cello2.mp3')]);
+  bufs.c1=await get('cells.mp3');                 // chapter 1 only needs its 56 short clips
+  c2Ready=get('cello2.mp3').then(b=>bufs.c2=b);  // the rest keeps loading in the background
 }
+async function needC2(){ if(bufs.c2) return true; $('capMeta').textContent='소리를 불러오는 중…'; try{ await c2Ready; return true; }catch(e){ $('capMeta').textContent='소리를 불러오지 못했습니다. 새로 고쳐 주세요.'; return false; } }
 function amp(){ if(!analyser) return 0; analyser.getFloatTimeDomainData(abuf); let s=0; for(const v of abuf) s+=v*v; return Math.min(1,Math.sqrt(s/abuf.length)*7); }
 let oneShot=null;
 function playSeg(buf,t0,t1,fade=.5){
-  if(oneShot){ try{oneShot.g.gain.setTargetAtTime(0,AC.currentTime,.06); oneShot.s.stop(AC.currentTime+.3);}catch(e){} }
+  wakeAudio(); if(oneShot){ try{oneShot.g.gain.setTargetAtTime(0,AC.currentTime,.04); oneShot.s.stop(AC.currentTime+.2);}catch(e){} }
   const s=AC.createBufferSource(), g=AC.createGain(); s.buffer=buf; s.connect(g); g.connect(master);
   const d=Math.max(.4,t1-t0), n=AC.currentTime;
-  g.gain.setValueAtTime(0,n); g.gain.linearRampToValueAtTime(1,n+.06);
+  g.gain.setValueAtTime(0,n); g.gain.linearRampToValueAtTime(1,n+.012);
   g.gain.setValueAtTime(1,n+Math.max(.1,d-fade)); g.gain.linearRampToValueAtTime(0,n+d);
   s.start(n,t0,d+.05); oneShot={s,g}; return d;
 }
 let stream=null;
 function playStream(buf,offset=0){
-  stopStream(); const s=AC.createBufferSource(); s.buffer=buf; s.connect(master);
+  wakeAudio(); stopStream(); if(!buf) return; const s=AC.createBufferSource(); s.buffer=buf; s.connect(master);
   s.start(AC.currentTime,offset); stream={s,t0:AC.currentTime-offset,dur:buf.duration,done:false};
   s.onended=()=>{ if(stream&&stream.s===s) stream.done=true; };
 }
@@ -261,8 +272,8 @@ for(let i=0;i<56;i++){
   const c=i%8, r=Math.floor(i/8); b.style.backgroundPosition=`${c/7*100}% ${r/6*100}%`;
   b.setAttribute('aria-label',`${r+1}행 ${c+1}열 칸`); b.dataset.i=i; grid.appendChild(b);
 }
-grid.addEventListener('click',e=>{
-  const b=e.target.closest('.cell'); if(!b||!S) return; const i=+b.dataset.i, c=i%8;
+function wakeCell(e){
+  const b=e.target.closest('.cell'); if(!b||!S||!bufs.c1) return; const i=+b.dataset.i, c=i%8;
   const cell=S.c1.cells[i]; const d=playSeg(bufs.c1,cell[0],cell[1],.8);
   if(litCell) litCell.classList.replace('on','seen');
   b.classList.add('on'); litCell=b; woke.add(i);
@@ -272,7 +283,9 @@ grid.addEventListener('click',e=>{
   bow1={t0:AC.currentTime,d,dir:(woke.size%2?1:-1)};
   clearTimeout(b._t); b._t=setTimeout(()=>{ if(litCell===b){ b.classList.replace('on','seen'); litCell=null; } },d*1000+200);
   $('capMeta').textContent=`깨운 칸 ${woke.size} / 56`;
-});
+}
+grid.addEventListener('pointerdown',e=>{ if(e.button>0) return; wakeCell(e); });
+grid.addEventListener('click',e=>{ if(e.detail===0) wakeCell(e); });
 
 /* ---------- 02 흐름 ---------- */
 const cv=$('paint'), cx=cv.getContext('2d'), tc=$('tooth'), fig2=$('fig2');
@@ -407,10 +420,10 @@ function render3(){
   $('capText').textContent= p>=1 ? (peek&&all<GOAL?'미리 보기 · ':'')+'1,000번의 노로 오페라하우스에 닿았습니다. 김종훈이 오케스트라와 함께 첼로를 연주합니다.'
     : (dbRef? '노를 저을 때마다 첼로가 한 번 활을 긋습니다. 모든 관람객의 노가 함께 쌓입니다.' : '노를 저을 때마다 첼로가 한 번 활을 긋습니다. (이 화면에서는 혼자 젓는 기록만 남습니다)');
 }
-function startFinale(){ finale=true; fin0=performance.now(); voy.classList.add('finale'); if(oneShot){try{oneShot.s.stop();}catch(e){}} playStream(bufs.c2,0); }
+function startFinale(){ if(!bufs.c2){ needC2().then(ok=>{ if(ok&&scene===3) startFinale(); }); return; } finale=true; fin0=performance.now(); voy.classList.add('finale'); if(oneShot){try{oneShot.s.stop();}catch(e){}} playStream(bufs.c2,0); }
 function endFinale(){ finale=false; voy.classList.remove('finale'); stopStream(); }
 function row(){
-  if(!S) return; if(finale){ fin0=performance.now(); playStream(bufs.c2,0); return; } const s=S.c2.segs[segI%S.c2.segs.length]; segI++;
+  if(!S) return; wakeAudio(); if(!bufs.c2){ needC2(); return; } if(finale){ fin0=performance.now(); playStream(bufs.c2,0); return; } const s=S.c2.segs[segI%S.c2.segs.length]; segI++;
   playSeg(bufs.c2,s[0],s[1],.6); mine++;
   fig3.classList.remove('row'); void fig3.offsetWidth; fig3.classList.add('row');
   const r=voy.getBoundingClientRect(); const cols=[P.white,P.orange,P.sky,P.white];
@@ -526,7 +539,7 @@ function go(n){
   scene=n; for(const k of [1,2,3]){ $('s'+k).hidden=k!==n; $('nav'+k).setAttribute('aria-current',k===n?'true':'false'); }
   stopStream(); if(oneShot){ try{oneShot.s.stop();}catch(e){} }
   if(n===1){ $('capText').textContent=caps[1]; $('capMeta').textContent=`깨운 칸 ${woke.size} / 56`; }
-  if(n===2){ $('capText').textContent=caps[2]; if(S) start2(); }
+  if(n===2){ $('capText').textContent=caps[2]; if(S) needC2().then(ok=>{ if(ok&&scene===2) start2(); }); }
   if(n!==3&&finale){ voy.classList.remove('finale'); finale=false; }
   if(n===3){ size3(); render3(); }
 }
@@ -541,8 +554,8 @@ function loop(){
   requestAnimationFrame(loop);
 }
 $('start').onclick=async()=>{
-  $('start').disabled=true;
-  try{ await loadAll(); await AC.resume(); $('intro').hidden=true; if(!window.claude?.use) $('peek').hidden=false; go(scene); loop(); connect(); }
+  $('start').disabled=true; if(!AC) openAudio();
+  try{ await loadAll(); wakeAudio(); $('intro').hidden=true; if(!window.claude?.use) $('peek').hidden=false; go(scene); loop(); connect(); }
   catch(e){ $('load').textContent='소리를 불러오지 못했습니다. 페이지를 새로 고친 뒤 다시 눌러 주세요.'; $('start').disabled=false; }
 };
 })();
