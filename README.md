@@ -27,12 +27,15 @@ GitHub Pages로 배포해도 그대로 동작합니다.
 - 로컬에서는 "도착 장면 미리 보기" 버튼이 항상 보입니다.
 - 소리는 휴대폰 녹음, 그림은 작품 사진입니다. 본편에서는 퍼포먼스 당일 소스로 교체합니다.
 
-## 폴더
+## 파일
 
 - `index.html`: 페이지 전체 (HTML, CSS, JS 한 파일)
-- `assets/`: 그림, 피규어·RC카 이미지, 첼로 녹음(mp3), 소리 분석 데이터(`sound.json`)
-- `tools/sound_data.py`: 녹음에서 활 단위 구간·음높이·음량을 뽑아 `sound.json`을 만드는 스크립트
-- `tools/bow_and_wheel_video.py`: 같은 데이터로 영상 《활과 바퀴》를 렌더링하는 스크립트
+- `score.jpg`, `opera.jpg`: 작가의 악보 그림, 시드니 오페라하우스 그림
+- `fig1.png`, `fig2.png`, `rc.png`: 피규어와 RC카 이미지
+- `cello1.mp3`, `cello2.mp3`: 첼로 녹음
+- `sound.json`: 녹음에서 뽑은 활 단위 구간, 음높이, 음량 데이터
+- `sound_data.py`: `sound.json`을 만드는 스크립트
+- `bow_and_wheel_video.py`: 같은 데이터로 영상 《활과 바퀴》를 렌더링하는 스크립트
 
 ## 권리
 
